@@ -6,6 +6,7 @@ import io
 import json
 import os
 import sqlite3
+import sys
 import tempfile
 import time
 import unittest
@@ -34,6 +35,8 @@ class NotifierTests(unittest.TestCase):
         self.now = int(time.time() * 1000)
 
         notifier.DB = str(self.db_path)
+        self._orig_resolve_db = notifier._resolve_db
+        notifier._resolve_db = lambda: str(self.db_path)
         notifier.LOGDIR = str(self.logs)
         notifier.STATE = str(self.logs / "state_notify.json")
         notifier.EVENTS = str(self.logs / "events_notify.jsonl")
@@ -44,6 +47,7 @@ class NotifierTests(unittest.TestCase):
 
     def tearDown(self):
         self.con.close()
+        notifier._resolve_db = self._orig_resolve_db
         self.tmp.cleanup()
 
     def add(self, event, payload=None, when_ms=None):
@@ -83,6 +87,13 @@ class NotifierTests(unittest.TestCase):
         self.add("run.completed", {"reason": "completed"}, self.now - 2000)
         self.add("agent.done", {"reason": "completed"}, self.now - 1000)
         self.assertEqual(len(self.poll()), 1)
+
+    def test_two_orphan_terminals_are_both_announced(self):
+        # No run.started: two same-type terminals are two separate lost turns,
+        # not one run's sibling pair.
+        self.add("agent.done", {"reason": "completed", "text": "first"}, self.now - 3000)
+        self.add("agent.done", {"reason": "completed", "text": "second"}, self.now - 1000)
+        self.assertEqual(len(self.poll()), 2)
 
     def test_hung_run_after_33_minutes(self):
         self.add("run.started", when_ms=self.now - 33 * 60 * 1000)
@@ -164,6 +175,48 @@ class NotifierTests(unittest.TestCase):
         self.con.close()
         os.remove(self.db_path)
         self.assertEqual(self.poll(), [])
+
+    def test_database_switch_is_followed(self):
+        self.add("run.started", when_ms=self.now - 3000)
+        self.add("agent.done", {"reason": "completed", "text": "old"}, self.now - 1000)
+        self.assertEqual(len(self.poll()), 1)
+
+        new_path = self.dir / "hub-events-new.db"
+        con = sqlite3.connect(str(new_path))
+        con.execute(
+            "create table hub_events (sequence integer primary key autoincrement, "
+            "event text not null, session_id text, envelope_json text not null, "
+            "created_at integer not null)"
+        )
+        con.execute(
+            "insert into hub_events(event, session_id, envelope_json, created_at) "
+            "values (?, ?, ?, ?)",
+            ("run.started", "test-session",
+             json.dumps({"payload": {}}, ensure_ascii=False), self.now - 1000))
+        con.execute(
+            "insert into hub_events(event, session_id, envelope_json, created_at) "
+            "values (?, ?, ?, ?)",
+            ("agent.done", "test-session",
+             json.dumps({"payload": {"reason": "completed", "text": "new"}},
+                        ensure_ascii=False), self.now))
+        con.commit()
+        con.close()
+        notifier._resolve_db = lambda: str(new_path)
+        events = self.poll()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["last"], "new")
+
+    def test_once_returns_nonzero_when_database_is_unreadable(self):
+        self.con.close()
+        os.remove(self.db_path)
+        old_argv = sys.argv
+        sys.argv = ["cline_notify.py", "--once"]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = notifier.main()
+        finally:
+            sys.argv = old_argv
+        self.assertEqual(rc, 2)
 
 
 if __name__ == "__main__":

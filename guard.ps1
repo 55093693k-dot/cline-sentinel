@@ -1,5 +1,6 @@
-# guard.ps1 -- restart cline_notify.py when its heartbeat is stale.
+# guard.ps1 -- restart cline_notify.py when its heartbeat is stale or blind.
 # Runs from Task Scheduler every 5 minutes. Healthy => no log line.
+# "Blind" means the heartbeat reports consecutive DB read failures (db_fail).
 # It is independent by default; an optional peer task can be enabled explicitly.
 $ErrorActionPreference = 'SilentlyContinue'
 $dir   = $PSScriptRoot
@@ -8,6 +9,7 @@ $hb    = Join-Path $logs 'heartbeat.json'
 $log   = Join-Path $logs 'guard.log'
 $main  = Join-Path $dir 'cline_notify.py'
 $maxAge = 600
+$maxDbFail = 3        # consecutive DB-read failures before treating the watcher as sick
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
 
 function Note([string]$m) {
@@ -70,7 +72,19 @@ if (-not (Test-Path $main)) {
 
 $hasHb = Test-Path $hb
 $age = 99999
-if ($hasHb) { $age = ((Get-Date) - (Get-Item $hb).LastWriteTime).TotalSeconds }
+$dbFail = 0
+if ($hasHb) {
+    $age = ((Get-Date) - (Get-Item $hb).LastWriteTime).TotalSeconds
+    # A fresh heartbeat only proves the process is alive.  The payload says
+    # whether it can actually SEE the hub DB; a silent DB failure must be a
+    # restart reason, not a healthy result.
+    try {
+        $hbObj = Get-Content -LiteralPath $hb -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($null -ne $hbObj.db_fail) { $dbFail = [int]$hbObj.db_fail }
+    } catch {
+        Note "heartbeat unreadable: $($_.Exception.Message)"
+    }
+}
 
 if (-not $hasHb) {
     # At logon the guard may start before the main task writes its first heartbeat.
@@ -79,15 +93,15 @@ if (-not $hasHb) {
     } else {
         exit 0
     }
-} elseif ($age -le $maxAge) {
+} elseif ($age -le $maxAge -and $dbFail -lt $maxDbFail) {
     exit 0
 } else {
     $procs = Find-Watchers
     foreach ($p in $procs) { Stop-Process -Id $p.ProcessId -Force }
     if ($procs.Count -gt 0) {
-        Note ("watcher heartbeat stale {0:N0}s -> killed {1} instance(s)" -f $age, $procs.Count)
+        Note ("watcher unhealthy: age={0:N0}s db_fail={1} -> killed {2} instances" -f $age, $dbFail, $procs.Count)
     } else {
-        Note ("watcher heartbeat stale {0:N0}s, no process -> restart" -f $age)
+        Note ("watcher unhealthy: age={0:N0}s db_fail={1}, no process -> restart" -f $age, $dbFail)
     }
 }
 

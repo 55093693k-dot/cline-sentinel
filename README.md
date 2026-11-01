@@ -119,7 +119,8 @@ This registers:
 
 - `ClineNotify` — runs `cline_notify.py --follow` at logon.
 - `ClineNotifyGuard` — starts two minutes after installation, then every five minutes; restarts the
-  notifier if its heartbeat is older than 600 seconds. The schedule survives a reboot.
+  notifier if its heartbeat is older than 600 seconds, or if the heartbeat reports 3 consecutive
+  database read failures (`db_fail >= 3`). The schedule survives a reboot.
 
 The guard can also keep **one optional peer task** healthy. This is **off by default**, so installing
 this tool does not manage another tool's scheduled tasks. To enable it, set the environment variable
@@ -244,7 +245,7 @@ the banner while the sound still plays.
 | Windows policy | Focus assist, global notifications, or another desktop policy hides the banner | `setting=Enabled` and `banner=allow`, but no banner | No; this is outside the process |
 | Execution | Task disabled, PC asleep, or the database cannot be read | `heartbeat.json` stale, no new `events_notify.jsonl`, or `DB READ FAILED` | The guard can restart the notifier, not Windows or a sleeping PC |
 | Hub lifecycle | Cline stops or restarts before a run starts; there is no `run.started` | no event at all; this is indistinguishable from an idle Cline | No; the notifier follows the event stream, not Cline's process |
-| Database replacement | Cline switches to a different `hub-events-*.db` | the watcher keeps the path selected at startup | Restart `ClineNotify` after the DB path changes |
+| Database replacement | Cline switches to a different `hub-events-*.db` | the watcher resolves the newest path on every poll and resets its cursor on a path change | A same-name replacement that reuses old sequence numbers may still need a restart |
 | Sound | Custom WAV missing/corrupt, system muted, low volume, or no output device | `sound=` in the toast log | Missing/broken WAV falls back to the system WAV/beep; volume and device are outside the tool |
 
 A banner can be hidden while the sound still plays, or the sound can fail while the banner is shown.
@@ -272,8 +273,8 @@ Paths may be absolute or use `%USERPROFILE%` / `~`. Relative paths are resolved 
 
 | Symptom | Check |
 |---|---|
-| No toast at all | Is `cline_notify.py --follow` running? Is `logs\heartbeat.json` younger than 600 s? Does `hub_db` exist? |
-| `DB READ FAILED` | Cline's database path or schema changed; run `--replay` against the current database |
+| No toast at all | Is `cline_notify.py --follow` running? Is `logs\heartbeat.json` younger than 600 s? Does `db_fail` stay at 0? Does `hub_db` exist? |
+| `DB READ FAILED` | Cline's database path or schema changed; run `--replay` against the current database. The guard restarts after 3 consecutive failures; `--once` exits with code 2. |
 | Toast log says `OK` but no banner | Is `banner=allow`? If not, set `toast_aumid` or allow that sender in Windows notifications. If yes, check Focus assist and the global switch. |
 | Too many notifications | Increase `parked_after_s`; remove a tool from `fast_tools` |
 | No sound | Check system volume and the `sound=` field in the toast log |
@@ -295,9 +296,11 @@ Paths may be absolute or use `%USERPROFILE%` / `~`. Relative paths are resolved 
   separate hub heartbeat or process signal.
 - **A hub failure during a turn is delayed.** If `run.started` was recorded, the 30-minute
   no-activity rule can fire while the database is still readable. If the database becomes unreadable,
-  the notifier logs `DB READ FAILED` but does not send a toast.
-- **The database path is fixed at startup.** If Cline replaces the event database, restart
-  `ClineNotify` so the watcher selects the new path.
+  the notifier logs `DB READ FAILED`, writes `db_fail`, and `--once` exits with code 2; the guard
+  restarts the watcher after 3 consecutive failures, but it cannot send a turn toast by itself.
+- **Database changes are followed, with one caveat.** The watcher resolves `hub-events-*.db` on every
+  poll and resets its cursor when the path changes. A replacement that keeps the same filename and
+  reuses old sequence numbers may still need a manual `ClineNotify` restart.
 - **The event log may contain snippets.** `events_notify.jsonl` stores the last line of a turn for
   diagnosis; treat `logs\` as private and do not attach it to a public issue.
 - **A banner is not proof of reading.** Windows decides whether a notification is visible.
@@ -311,8 +314,9 @@ The sandbox suite creates a temporary database and never reads real Cline data o
 python -m unittest discover -s tests -v
 ```
 
-It covers the four terminal events, duplicate suppression, the 30-minute hang rule, the 15/60-second
-parked thresholds, progress updates, stale calls, and first-start silence.
+It covers the four terminal events, duplicate suppression, orphan terminal events, database switches,
+the 30-minute hang rule, the 15/60-second parked thresholds, progress updates, stale calls,
+first-start silence, and the `--once` DB-failure exit code.
 
 ## Files
 
@@ -324,7 +328,7 @@ parked thresholds, progress updates, stale calls, and first-start silence.
 | `install.ps1` | Task Scheduler registration in preview, apply, or remove mode |
 | `launch\` | hidden `wscript` wrappers for the notifier and guard |
 | `config.example.json` | all settings, no personal paths |
-| `tests\test_cline_notify.py` | 15 sandbox tests |
+| `tests\test_cline_notify.py` | 18 sandbox tests |
 
 ## Uninstall and cleanup
 

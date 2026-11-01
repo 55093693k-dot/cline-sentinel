@@ -113,6 +113,10 @@ def load_state():
     st.setdefault("last_event_ms", 0)
     st.setdefault("run_active", False)
     st.setdefault("run_id", None)
+    st.setdefault("db_path", "")
+    st.setdefault("run_id_from_started", False)
+    st.setdefault("last_terminal", None)
+    st.setdefault("last_terminal_ms", 0)
     return st
 
 
@@ -160,8 +164,28 @@ def read_turns(st):
     """New rows since the cursor: turn ends (agent.done) and tool start/finish (for the parked rule)."""
     global _db_fail
     out = []
+
+    # Resolve on EVERY read, not once at import: Cline creates a new
+    # hub-events-*.db when the database is replaced, and --follow must follow it.
+    db = _resolve_db()
+    if db != st.get("db_path"):
+        if st.get("db_path"):
+            print("%s DB SWITCH %s" % (now(), db), flush=True)
+        st["db_path"] = db
+        st["seq"] = 0
+        st["announced"] = []
+        st["pending"] = {}
+        st["run_id"] = None
+        st["run_active"] = False
+        st["last_event_ms"] = 0
+        st["run_id_from_started"] = False
+        st["last_terminal"] = None
+        st["last_terminal_ms"] = 0
+
+    started_run = bool(st.get("run_id_from_started", False))
+    terminal_seen = False
     try:
-        con = sqlite3.connect("file:%s?mode=ro" % DB.replace("\\", "/"), uri=True, timeout=5)
+        con = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=5)
         rows = list(con.execute(
             "select sequence, event, created_at, envelope_json from hub_events "
             "where sequence > ? and event in "
@@ -191,6 +215,10 @@ def read_turns(st):
             st["run_id"] = created            # a new turn: fresh key for its terminal event
             st["run_active"] = True
             st["pending"] = {}
+            st["run_id_from_started"] = True
+            st["last_terminal"] = None
+            st["last_terminal_ms"] = 0
+            started_run = True
             continue
         if ev == "tool.started":
             tid = p.get("toolCallId")
@@ -210,8 +238,18 @@ def read_turns(st):
 
         st["pending"] = {}                     # a terminal event means nothing is parked any more
         st["run_active"] = False
-        if st.get("run_id") is None:
+        terminal_seen = True
+        # A terminal sibling (run.completed + agent.done) shares the run id set by
+        # run.started. With NO run.started, every same-type terminal is a new
+        # orphan run; two different terminal types seconds apart are siblings.
+        same_burst = (created - st.get("last_terminal_ms", 0) <= 5000
+                      and ev != st.get("last_terminal"))
+        if not started_run and not same_burst:
             st["run_id"] = created
+        elif st.get("run_id") is None:
+            st["run_id"] = created
+        st["last_terminal"] = ev
+        st["last_terminal_ms"] = created
         result = p.get("result") or {}
         text = p.get("text") or (result.get("text") if isinstance(result, dict) else "") or ""
         if not isinstance(text, str):
@@ -242,6 +280,10 @@ def read_turns(st):
         # agent.done at all, which the old agent.done-only rule missed completely).
         out.append({"key": "run:%d" % st["run_id"], "kind": "TURN",
                     "reason": reason or ev, "last": detail[:140]})
+    if terminal_seen and started_run:
+        # The run.started id has now covered this run's terminal siblings; a
+        # later terminal without a new run.started gets its own id.
+        st["run_id_from_started"] = False
     return out
 
 
@@ -336,7 +378,8 @@ def poll(allow_toast=True, initial=False):
 
 def replay():
     st = {"seq": 0, "announced": [], "pending": {}, "last_event_ms": 0,
-          "run_active": False, "run_id": None}
+          "run_active": False, "run_id": None, "db_path": "",
+          "run_id_from_started": False, "last_terminal": None, "last_terminal_ms": 0}
     n = 0
     while True:
         before = st["seq"]
@@ -368,16 +411,17 @@ def main():
             print("%s %-9s toast_rc=%s  %s" % (e["ts"], e["reason"], e["toast_rc"], e["last"][:60]))
         if not events:
             print("%s no verdict" % now())
-        return 0
+        return 2 if _db_fail else 0
 
     interval = float(CFG["poll_interval_s"])
     # startup self-check: a watcher that cannot work must say so, not sit there silently
+    db_now = _resolve_db()
     problems = []
-    if not os.path.exists(DB):
-        problems.append("db missing: " + DB)
+    if not os.path.exists(db_now):
+        problems.append("db missing: " + db_now)
     if not os.path.exists(TOAST):
         problems.append("toast.ps1 missing: " + TOAST)
-    print("%s STARTED pid=%d db=%s %s" % (now(), os.getpid(), DB,
+    print("%s STARTED pid=%d db=%s %s" % (now(), os.getpid(), db_now,
                                          ("PROBLEMS: " + "; ".join(problems)) if problems else "ok"),
           flush=True)
     print("%s follow, poll %.1fs, first=%s" % (now(), interval, first), flush=True)
