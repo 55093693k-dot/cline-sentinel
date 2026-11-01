@@ -15,6 +15,7 @@ archived record when the material is reused.
 - `toast.ps1`
 - `guard.ps1`
 - `install.ps1`
+- `launch/`
 - `tests/test_cline_notify.py`
 - `.github/workflows/tests.yml`
 

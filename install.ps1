@@ -24,8 +24,15 @@ $ErrorActionPreference = 'Stop'
 $dir = $PSScriptRoot
 $main = Join-Path $dir 'cline_notify.py'
 $guard = Join-Path $dir 'guard.ps1'
+$launchDir = Join-Path $dir 'launch'
+$notifyVbs = Join-Path $launchDir 'notify.vbs'
+$guardVbs = Join-Path $launchDir 'guard.vbs'
+$wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
 if (-not (Test-Path $main)) { throw "cline_notify.py not found in $dir" }
 if (-not (Test-Path $guard)) { throw "guard.ps1 not found in $dir" }
+if (-not (Test-Path $notifyVbs)) { throw "notify.vbs not found in $launchDir" }
+if (-not (Test-Path $guardVbs)) { throw "guard.vbs not found in $launchDir" }
+if (-not (Test-Path $wscript)) { throw "wscript.exe not found: $wscript" }
 
 if ($Remove) {
     foreach ($name in @($NotifyTask, $GuardTask)) {
@@ -42,42 +49,33 @@ if ($Remove) {
 }
 
 $python = Get-Command python -ErrorAction SilentlyContinue
-if ($python) {
-    $pyExe = $python.Source
-    $pyPrefix = ''
-} else {
-    $python = Get-Command py -ErrorAction SilentlyContinue
-    if (-not $python) { throw 'Python 3 was not found on PATH' }
-    $pyExe = $python.Source
-    $pyPrefix = '-3 '
-}
+if (-not $python) { $python = Get-Command py -ErrorAction SilentlyContinue }
+if (-not $python) { throw 'Python 3 was not found on PATH' }
 
-$notifyAction = New-ScheduledTaskAction -Execute $pyExe `
-    -Argument ($pyPrefix + '"' + $main + '" --follow') -WorkingDirectory $dir
+$notifyAction = New-ScheduledTaskAction -Execute $wscript `
+    -Argument ('"' + $notifyVbs + '"') -WorkingDirectory $dir
 $notifyTrigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
 $notifySettings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) `
-    -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+    -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -Hidden
 
-$psExe = Join-Path $PSHOME 'powershell.exe'
-$guardAction = New-ScheduledTaskAction -Execute $psExe `
-    -Argument ('-NoProfile -ExecutionPolicy Bypass -File "' + $guard + '"') `
-    -WorkingDirectory $dir
+$guardAction = New-ScheduledTaskAction -Execute $wscript `
+    -Argument ('"' + $guardVbs + '"') -WorkingDirectory $dir
 $guardTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
     -RepetitionInterval (New-TimeSpan -Minutes 5) `
     -RepetitionDuration (New-TimeSpan -Days 3650)
 $guardSettings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 2) -Hidden
 
 if ($Preview) {
     "notify task : $NotifyTask"
-    "action      : $pyExe $pyPrefix`"$main`" --follow"
+    "action      : $wscript `"$notifyVbs`" (hidden wrapper)"
     "trigger     : at logon ($env:USERDOMAIN\$env:USERNAME)"
-    "settings    : battery=allow, IgnoreNew, no time limit, restart 999x / 1 min"
+    "settings    : hidden, battery=allow, IgnoreNew, no time limit, restart 999x / 1 min"
     "guard task  : $GuardTask"
-    "guard       : $psExe -File `"$guard`""
+    "guard       : $wscript `"$guardVbs`" (hidden wrapper)"
     "guard when  : +2 min after installation, then every 5 min"
     "nothing was registered (-Preview)"
     exit 0

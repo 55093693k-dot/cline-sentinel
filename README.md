@@ -45,6 +45,10 @@ cline-sentinel\
 ├─ toast.ps1
 ├─ guard.ps1
 ├─ install.ps1
+├─ launch\
+│  ├─ notify.cmd
+│  ├─ notify.vbs
+│  └─ guard.vbs
 ├─ config.example.json
 └─ tests\
 ```
@@ -107,6 +111,10 @@ This registers:
 - `ClineNotify` — runs `cline_notify.py --follow` at logon.
 - `ClineNotifyGuard` — starts two minutes after installation, then every five minutes; restarts the
   notifier if its heartbeat is older than 600 seconds. The schedule survives a reboot.
+
+Both tasks start through `wscript` wrappers with a hidden window; no console should flash at logon or
+every five minutes. If a console still appears, inspect the task action with
+`Get-ScheduledTask -TaskName ClineNotify`.
 
 Remove both tasks with:
 
@@ -278,6 +286,7 @@ parked thresholds, progress updates, stale calls, and first-start silence.
 | `toast.ps1` | AUMID selection, banner state, sound, one-line log |
 | `guard.ps1` | heartbeat check and restart |
 | `install.ps1` | Task Scheduler registration in preview, apply, or remove mode |
+| `launch\` | hidden `wscript` wrappers for the notifier and guard |
 | `config.example.json` | all settings, no personal paths |
 | `tests\test_cline_notify.py` | 15 sandbox tests |
 
