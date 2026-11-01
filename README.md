@@ -4,13 +4,15 @@ A local Windows notifier for Cline: **one toast when a turn ends**, and silence 
 working.
 
 Cline can run a long tool, wait for an approval, or stop on an error while you are away from the
-screen. This tool reads Cline's local event database, decides whether the turn needs you, and sends a
-Windows notification. It does not call a model, use the network, or depend on Cline hooks.
+screen. The Cline builds tested here did not provide a Windows turn-end notification. This tool adds
+one by reading Cline's local event database; it does not call a model, use the network, depend on
+Cline hooks, or keep turn state in model memory.
 
 - Windows 10/11, Python 3.8+, standard library only.
 - Read-only access to `%USERPROFILE%\.cline\data\db\hub-events-*.db`.
 - One resident process plus one scheduled health check.
 - Not affiliated with Cline.
+- Release: [1.0.0](https://github.com/55093693k-dot/cline-sentinel/releases/tag/1.0.0).
 
 ## Why a turn-end notifier
 
@@ -24,6 +26,9 @@ This tool treats any terminal event as the end of a turn:
 
 It also notices two other situations: a run that produces no event for 30 minutes, and a tool call
 that stays open while nothing else happens. Mid-run silence alone is not a notification.
+
+This is not a hook. A hook is a separate callback; this reader follows the append-only event stream
+and keeps its cursor on disk. It does not use model memory or a prompt-side instruction.
 
 ## What a notification looks like
 
@@ -329,7 +334,8 @@ read-only; removing its own `logs\` does not remove Cline data.
 
 `cline-sentinel` is a local event reader. It does not modify Cline data, edit workspace files, start
 or kill Cline, change Windows settings, or shut down the computer. It runs with the current user's
-permissions and does not use the network, a model, telemetry, a service, or a driver.
+permissions and does not use the network, a model, telemetry, a service, a driver, a hook, or model
+memory.
 
 It still creates state and notification records under `logs/`; treat those files as private. Windows,
 Python, Cline, and the hardware can fail independently, so no software can guarantee that a machine

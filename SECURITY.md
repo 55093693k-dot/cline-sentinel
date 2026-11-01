@@ -15,7 +15,7 @@ accesses and what it deliberately does not do.
 - `install.ps1` creates or removes two per-user Task Scheduler entries.
 
 No administrator rights are required. The tool does not open a network connection, call a model,
-send telemetry, or install a service or driver.
+send telemetry, use a hook, keep model memory, or install a service or driver.
 
 ## What it does not do
 
