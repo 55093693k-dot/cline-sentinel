@@ -18,8 +18,9 @@ archived record when the material is reused.
 - `tests/test_cline_notify.py`
 - `.github/workflows/tests.yml`
 
-The written documentation -- `README.md`, this file, and the prose inside `CITATION.cff` -- is
-licensed under **CC BY 4.0** (https://creativecommons.org/licenses/by/4.0/).
+The written documentation -- `README.md`, `SECURITY.md`, this file, and the prose inside
+`CITATION.cff` -- is licensed under **CC BY 4.0**
+(https://creativecommons.org/licenses/by/4.0/).
 
 Both identifiers appear in `CITATION.cff` as an array, which the Citation File Format reads as "or".
 The archived record takes a single identifier from `.zenodo.json` instead, because that service's

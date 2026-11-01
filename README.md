@@ -249,6 +249,40 @@ parked thresholds, progress updates, stale calls, and first-start silence.
 | `config.example.json` | all settings, no personal paths |
 | `tests\test_cline_notify.py` | 15 sandbox tests |
 
+## Uninstall and cleanup
+
+Remove both scheduled tasks first:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Remove
+```
+
+If the repository has already been deleted, remove them directly:
+
+```powershell
+Unregister-ScheduledTask -TaskName 'ClineNotify','ClineNotifyGuard' -Confirm:$false
+```
+
+Then remove only the tool's own files:
+
+- The extracted repository folder, including `config.json`.
+- The repository's `logs\` directory (`state_notify.json`, `events_notify.jsonl`,
+  `toast_notify.log`, and `heartbeat.json`).
+- Any custom WAV path or `toast_aumid` entry in the removed `config.json`.
+
+**Do not delete `%USERPROFILE%\.cline\data\db\` or any Cline session.** The tool opens that database
+read-only; removing its own `logs\` does not remove Cline data.
+
+## Safety and security
+
+`cline-sentinel` is a local event reader. It does not modify Cline data, edit workspace files, start
+or kill Cline, change Windows settings, or shut down the computer. It runs with the current user's
+permissions and does not use the network, a model, telemetry, a service, or a driver.
+
+It still creates state and notification records under `logs/`; treat those files as private. Windows,
+Python, Cline, and the hardware can fail independently, so no software can guarantee that a machine
+will never crash. See [SECURITY.md](SECURITY.md) for the precise scope and reporting guidance.
+
 ## Licence
 
 Copyright (c) 2026 Chan Kingho.
