@@ -24,7 +24,10 @@ function Find-Python {
 }
 
 function Find-Watchers {
-    @(Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+    # Match python.exe AND pythonw.exe: either can host the watcher, and a guard that only sees
+    # python.exe would leave a hung pythonw instance running (two watchers on one DB).
+    @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" `
+        -ErrorAction SilentlyContinue |
       Where-Object { $_.CommandLine -match 'cline_notify\.py' })
 }
 
@@ -32,9 +35,10 @@ function Find-Watchers {
 # Default target is the simulation sentinel (sim-sentinel's Sim_Sentinel_1min).  Everything here is
 # a NO-OP when that task does not exist, so users who only run the notifier are unaffected.
 # This runs BEFORE the early exits below, because a sick peer must be fixed even when the watcher
-# itself is perfectly healthy.
-$peerTask = 'Sim_Sentinel_1min'
-$peer = Get-ScheduledTask -TaskName $peerTask -ErrorAction SilentlyContinue
+# itself is perfectly healthy.  Override with CLINE_GUARD_PEER_TASK; set it to '-' to disable.
+$peerTask = if ($env:CLINE_GUARD_PEER_TASK) { $env:CLINE_GUARD_PEER_TASK } else { 'Sim_Sentinel_1min' }
+if ($peerTask -eq '-') { $peerTask = '' }
+$peer = if ($peerTask) { Get-ScheduledTask -TaskName $peerTask -ErrorAction SilentlyContinue } else { $null }
 if ($peer) {
     $info = Get-ScheduledTaskInfo -TaskName $peerTask
     if ($peer.State -eq 'Disabled') {

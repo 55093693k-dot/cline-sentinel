@@ -4,7 +4,8 @@
   Usage
     powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Preview
     powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-    powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Remove
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -NoStart   # do not start it now
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Remove    # unregister + stop
 
   Task names
     ClineNotify        starts cline_notify.py --follow at logon
@@ -16,6 +17,7 @@
 param(
     [switch]$Preview,
     [switch]$Remove,
+    [switch]$NoStart,
     [string]$NotifyTask = 'ClineNotify',
     [string]$GuardTask  = 'ClineNotifyGuard'
 )
@@ -43,6 +45,22 @@ if ($Remove) {
             "removed: $name"
         } else {
             "not installed: $name"
+        }
+    }
+    # Removing the tasks does NOT stop the watcher that is already running: it would keep reading the
+    # hub DB until the next reboot, with no guard left to supervise it.  Stop it here.
+    $left = @(Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" `
+                -ErrorAction SilentlyContinue |
+              Where-Object { $_.CommandLine -match 'cline_notify\.py' })
+    if ($left.Count -eq 0) {
+        "no watcher process was running"
+    }
+    foreach ($p in $left) {
+        if ($Preview) {
+            "would stop process: {0} (pid {1})" -f $p.Name, $p.ProcessId
+        } else {
+            Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+            "stopped process: {0} (pid {1})" -f $p.Name, $p.ProcessId
         }
     }
     exit 0
@@ -87,5 +105,20 @@ Register-ScheduledTask -TaskName $GuardTask -Action $guardAction `
     -Trigger $guardTrigger -Settings $guardSettings -Force | Out-Null
 
 "registered: $NotifyTask, $GuardTask"
+
+# The notify task triggers at logon, so right after installation nothing is running and the tool
+# looks broken (LastTaskResult 267011 = never ran).  Start it now so the first banner needs no
+# logout; -NoStart keeps the old behaviour (wait for the next logon).
+if ($NoStart) {
+    "not started (-NoStart); it will start at the next logon"
+} else {
+    Start-ScheduledTask -TaskName $NotifyTask
+    Start-Sleep -Milliseconds 1500
+    $state = (Get-ScheduledTask -TaskName $NotifyTask).State
+    $live = @(Get-CimInstance Win32_Process `
+                -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue |
+              Where-Object { $_.CommandLine -match 'cline_notify\.py' }).Count
+    "started: $NotifyTask (state=$state, watcher processes=$live)"
+}
 "run one check now: python .\cline_notify.py --once"
 "remove both:      .\install.ps1 -Remove"

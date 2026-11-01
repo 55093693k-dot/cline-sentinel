@@ -121,15 +121,30 @@ This registers:
 - `ClineNotifyGuard` — starts two minutes after installation, then every five minutes; restarts the
   notifier if its heartbeat is older than 600 seconds. The schedule survives a reboot.
 
+The guard also keeps an **optional peer task** healthy — by default `Sim_Sentinel_1min` (the
+simulation sentinel): `Disabled` → enable + start, non-zero `LastTaskResult` → stop + start, last run
+older than five minutes → start. It is a **no-op when that task does not exist**, so notifier-only
+users are unaffected. Override with the environment variable `CLINE_GUARD_PEER_TASK` (set it to `-`
+to disable the peer check).
+
+The installer also **starts `ClineNotify` immediately**, so the first notification does not wait for a
+logout. It prints `started: ClineNotify (state=..., watcher processes=1)`; if that count is 0, check
+`logs\guard.log` and `python .\cline_notify.py --once`. Pass `-NoStart` to register only and let the
+next logon start it.
+
 Both tasks start through `wscript` wrappers with a hidden window; no console should flash at logon or
 every five minutes. If a console still appears, inspect the task action with
 `Get-ScheduledTask -TaskName ClineNotify`.
 
-Remove both tasks with:
+Remove both tasks **and the running watcher process** with:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Remove
 ```
+
+Unregistering a task does not stop a process that is already running, so `-Remove` also stops any
+`python.exe` / `pythonw.exe` whose command line mentions `cline_notify.py` (it prints
+`stopped process: ... (pid N)`). `-Remove -Preview` shows what would be removed and stopped.
 
 ### 6. Verify it is alive
 
