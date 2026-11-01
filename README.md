@@ -70,10 +70,11 @@ change state or show a toast. On a fresh database the number can be zero.
 `--test` shows one toast. Read the last line of `logs\toast_notify.log`:
 
 ```text
-OK  2026-11-01 12:00:00  aumid=<id>  banner=allow  sound=wav  Cline needs you
+OK  2026-11-01 12:00:00  aumid=<id>  setting=Enabled  banner=allow  sound=wav  Cline needs you
 ```
 
-`aumid=` is the sender that accepted the call. `banner=allow` means that sender has
+`aumid=` is the sender that accepted the call. `setting=Enabled` is the OS view of that sender's
+channel; any other value means the sender is blocked. `banner=allow` means that sender has
 `ShowBanner=1`; `deny` or `unset` means Windows may accept the call and still show nothing. The
 sender is logged, so it is never a guess.
 

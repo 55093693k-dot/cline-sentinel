@@ -67,14 +67,19 @@ try {
     }
 
     $used = $null
+    $usedSetting = ''
     foreach ($aumid in $candidates) {
         try {
-            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($aumid).Show($toast)
+            $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($aumid)
+            $setting = $notifier.Setting.ToString()
+            if ($setting -ne 'Enabled') { continue }
+            $notifier.Show($toast)
             $used = $aumid
+            $usedSetting = $setting
             break
         } catch { }
     }
-    if (-not $used) { throw 'no AUMID accepted the toast' }
+    if (-not $used) { throw 'no enabled AUMID accepted the toast' }
 
     $banner = 'unset'
     try {
@@ -118,7 +123,7 @@ try {
 
     if ($LogFile) {
         ("OK`t" + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + "`taumid=" + $used +
-         "`tbanner=" + $banner + "`tsound=" + $snd + "`t" + $title) |
+         "`tsetting=" + $usedSetting + "`tbanner=" + $banner + "`tsound=" + $snd + "`t" + $title) |
             Add-Content -Path $LogFile -Encoding UTF8
     }
     exit 0
