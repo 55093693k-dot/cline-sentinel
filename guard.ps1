@@ -28,6 +28,33 @@ function Find-Watchers {
       Where-Object { $_.CommandLine -match 'cline_notify\.py' })
 }
 
+# --- optional peer sentinel: keep a SECOND, task-based sentinel healthy --------------------------
+# Default target is the simulation sentinel (sim-sentinel's Sim_Sentinel_1min).  Everything here is
+# a NO-OP when that task does not exist, so users who only run the notifier are unaffected.
+# This runs BEFORE the early exits below, because a sick peer must be fixed even when the watcher
+# itself is perfectly healthy.
+$peerTask = 'Sim_Sentinel_1min'
+$peer = Get-ScheduledTask -TaskName $peerTask -ErrorAction SilentlyContinue
+if ($peer) {
+    $info = Get-ScheduledTaskInfo -TaskName $peerTask
+    if ($peer.State -eq 'Disabled') {
+        Enable-ScheduledTask -TaskName $peerTask | Out-Null
+        Start-ScheduledTask  -TaskName $peerTask
+        Note "peer task '$peerTask' was Disabled -> enabled + triggered"
+    } elseif ($info.LastTaskResult -ne 0) {
+        # 267009 (0x41301) means an instance is STILL RUNNING; a bare Start-ScheduledTask is a
+        # no-op under MultipleInstances=IgnoreNew, so stop it first (observed 2026-11-01 17:22).
+        Stop-ScheduledTask  -TaskName $peerTask
+        Start-Sleep -Seconds 1
+        Start-ScheduledTask -TaskName $peerTask
+        Note ("peer task '{0}' rc={1} -> stopped + re-triggered" -f $peerTask, $info.LastTaskResult)
+    } elseif (((Get-Date) - $info.LastRunTime).TotalMinutes -gt 5) {
+        Start-ScheduledTask -TaskName $peerTask
+        Note ("peer task '{0}' last run {1:N0} min ago -> triggered" -f $peerTask,
+              ((Get-Date) - $info.LastRunTime).TotalMinutes)
+    }
+}
+
 if (-not (Test-Path $main)) {
     Note "cline_notify.py MISSING: $main"
     exit 1
