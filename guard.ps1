@@ -1,6 +1,6 @@
 # guard.ps1 -- restart cline_notify.py when its heartbeat is stale.
 # Runs from Task Scheduler every 5 minutes. Healthy => no log line.
-# It does not depend on any other sentinel or scheduled task.
+# It is independent by default; an optional peer task can be enabled explicitly.
 $ErrorActionPreference = 'SilentlyContinue'
 $dir   = $PSScriptRoot
 $logs  = Join-Path $dir 'logs'
@@ -31,13 +31,17 @@ function Find-Watchers {
       Where-Object { $_.CommandLine -match 'cline_notify\.py' })
 }
 
-# --- optional peer sentinel: keep a SECOND, task-based sentinel healthy --------------------------
-# Default target is the simulation sentinel (sim-sentinel's Sim_Sentinel_1min).  Everything here is
-# a NO-OP when that task does not exist, so users who only run the notifier are unaffected.
+# --- optional peer sentinel: keep ONE task-based sentinel healthy, only when enabled -------------
+# The peer is OFF by default, so this tool does not manage another tool's tasks unless asked.
+# Set CLINE_GUARD_PEER_TASK to a task name (for example 'Sim_Sentinel_1min') to enable the check;
+# set it to '-' (or leave it unset) to keep this guard independent.
 # This runs BEFORE the early exits below, because a sick peer must be fixed even when the watcher
-# itself is perfectly healthy.  Override with CLINE_GUARD_PEER_TASK; set it to '-' to disable.
-$peerTask = if ($env:CLINE_GUARD_PEER_TASK) { $env:CLINE_GUARD_PEER_TASK } else { 'Sim_Sentinel_1min' }
-if ($peerTask -eq '-') { $peerTask = '' }
+# itself is perfectly healthy.
+$peerTask = if ($env:CLINE_GUARD_PEER_TASK -and $env:CLINE_GUARD_PEER_TASK -ne '-') {
+    $env:CLINE_GUARD_PEER_TASK
+} else {
+    ''
+}
 $peer = if ($peerTask) { Get-ScheduledTask -TaskName $peerTask -ErrorAction SilentlyContinue } else { $null }
 if ($peer) {
     $info = Get-ScheduledTaskInfo -TaskName $peerTask

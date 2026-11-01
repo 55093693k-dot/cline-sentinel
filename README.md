@@ -121,16 +121,17 @@ This registers:
 - `ClineNotifyGuard` — starts two minutes after installation, then every five minutes; restarts the
   notifier if its heartbeat is older than 600 seconds. The schedule survives a reboot.
 
-The guard also keeps an **optional peer task** healthy — by default `Sim_Sentinel_1min` (the
-simulation sentinel): `Disabled` → enable + start, non-zero `LastTaskResult` → stop + start, last run
-older than five minutes → start. It is a **no-op when that task does not exist**, so notifier-only
-users are unaffected. Override with the environment variable `CLINE_GUARD_PEER_TASK` (set it to `-`
-to disable the peer check).
+The guard can also keep **one optional peer task** healthy. This is **off by default**, so installing
+this tool does not manage another tool's scheduled tasks. To enable it, set the environment variable
+`CLINE_GUARD_PEER_TASK` to a task name, for example `Sim_Sentinel_1min`: `Disabled` → enable + start,
+non-zero `LastTaskResult` → stop + start, last run older than five minutes → start. A missing task is
+a no-op; unset the variable or set it to `-` to keep the guard independent.
 
 The installer also **starts `ClineNotify` immediately**, so the first notification does not wait for a
 logout. It prints `started: ClineNotify (state=..., watcher processes=1)`; if that count is 0, check
-`logs\guard.log` and `python .\cline_notify.py --once`. Pass `-NoStart` to register only and let the
-next logon start it.
+`logs\guard.log` and `python .\cline_notify.py --once`. If a watcher is already running, the installer
+reports it and does not start a second one. Pass `-NoStart` to register only and let the next logon
+start it.
 
 Both tasks start through `wscript` wrappers with a hidden window; no console should flash at logon or
 every five minutes. If a console still appears, inspect the task action with

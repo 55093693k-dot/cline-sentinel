@@ -109,16 +109,26 @@ Register-ScheduledTask -TaskName $GuardTask -Action $guardAction `
 # The notify task triggers at logon, so right after installation nothing is running and the tool
 # looks broken (LastTaskResult 267011 = never ran).  Start it now so the first banner needs no
 # logout; -NoStart keeps the old behaviour (wait for the next logon).
+# Do not start a second watcher if an older install is still running: two followers would announce
+# the same turn twice.
 if ($NoStart) {
     "not started (-NoStart); it will start at the next logon"
 } else {
-    Start-ScheduledTask -TaskName $NotifyTask
-    Start-Sleep -Milliseconds 1500
-    $state = (Get-ScheduledTask -TaskName $NotifyTask).State
-    $live = @(Get-CimInstance Win32_Process `
-                -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue |
-              Where-Object { $_.CommandLine -match 'cline_notify\.py' }).Count
-    "started: $NotifyTask (state=$state, watcher processes=$live)"
+    $existing = @(Get-CimInstance Win32_Process `
+                    -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue |
+                  Where-Object { $_.CommandLine -match 'cline_notify\.py' })
+    if ($existing.Count -gt 0) {
+        $pids = ($existing | ForEach-Object { $_.ProcessId }) -join ', '
+        "watcher already running (pid $pids); not starting another"
+    } else {
+        Start-ScheduledTask -TaskName $NotifyTask
+        Start-Sleep -Milliseconds 1500
+        $state = (Get-ScheduledTask -TaskName $NotifyTask).State
+        $live = @(Get-CimInstance Win32_Process `
+                    -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue |
+                  Where-Object { $_.CommandLine -match 'cline_notify\.py' }).Count
+        "started: $NotifyTask (state=$state, watcher processes=$live)"
+    }
 }
 "run one check now: python .\cline_notify.py --once"
 "remove both:      .\install.ps1 -Remove"
