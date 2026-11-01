@@ -206,6 +206,13 @@ class NotifierTests(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["last"], "new")
 
+    def test_heartbeat_records_database_failure(self):
+        self.con.close()
+        os.remove(self.db_path)
+        self.poll()
+        hb = json.loads((self.logs / "heartbeat.json").read_text(encoding="utf-8"))
+        self.assertGreaterEqual(hb["db_fail"], 1)
+
     def test_once_returns_nonzero_when_database_is_unreadable(self):
         self.con.close()
         os.remove(self.db_path)
