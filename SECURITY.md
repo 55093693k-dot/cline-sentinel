@@ -43,6 +43,12 @@ validation, or backups.
 - The SQLite schema is a Cline implementation detail and may change between releases.
 - A notification attempt can succeed while Windows suppresses the banner. Read
   `logs\toast_notify.log` and check `setting=` and `banner=`.
+- If Cline stops or restarts before a run starts, there is no `run.started` event. An idle Cline and a
+  failed hub are indistinguishable from this event stream, so no reliable toast can be produced
+  without a separate hub heartbeat or process signal.
+- If the event database becomes unreadable, the notifier logs `DB READ FAILED` but does not send a
+  toast. If Cline switches to a different event database, restart `ClineNotify` to select the new
+  path.
 - `events_notify.jsonl` stores short turn excerpts. Treat `logs\` as private and do not attach it to
   a public issue.
 

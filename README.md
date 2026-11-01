@@ -218,6 +218,8 @@ the banner while the sound still plays.
 | Sender | AUMID is not registered, or per-app banners are off | `setting=` / `banner=` in `logs\toast_notify.log` | Choose another `toast_aumid`; the tool cannot register an app identity |
 | Windows policy | Focus assist, global notifications, or another desktop policy hides the banner | `setting=Enabled` and `banner=allow`, but no banner | No; this is outside the process |
 | Execution | Task disabled, PC asleep, or the database cannot be read | `heartbeat.json` stale, no new `events_notify.jsonl`, or `DB READ FAILED` | The guard can restart the notifier, not Windows or a sleeping PC |
+| Hub lifecycle | Cline stops or restarts before a run starts; there is no `run.started` | no event at all; this is indistinguishable from an idle Cline | No; the notifier follows the event stream, not Cline's process |
+| Database replacement | Cline switches to a different `hub-events-*.db` | the watcher keeps the path selected at startup | Restart `ClineNotify` after the DB path changes |
 | Sound | Custom WAV missing/corrupt, system muted, low volume, or no output device | `sound=` in the toast log | Missing/broken WAV falls back to the system WAV/beep; volume and device are outside the tool |
 
 A banner can be hidden while the sound still plays, or the sound can fail while the banner is shown.
@@ -262,6 +264,15 @@ Paths may be absolute or use `%USERPROFILE%` / `~`. Relative paths are resolved 
   `ask_question` was observed on the test machine. Auto-approval hides approval prompts.
 - **The guard has no layer below it.** If the guard task is disabled or the computer is off, nothing
   restarts the notifier or delivers missed events.
+- **A hub failure before a turn is silent.** The notifier follows `hub_events`, not the Cline process.
+  If Cline dies or restarts before a `run.started` exists, there is no turn event; an idle Cline and a
+  dead hub look identical. This cannot be turned into a reliable "turn aborted" toast without a
+  separate hub heartbeat or process signal.
+- **A hub failure during a turn is delayed.** If `run.started` was recorded, the 30-minute
+  no-activity rule can fire while the database is still readable. If the database becomes unreadable,
+  the notifier logs `DB READ FAILED` but does not send a toast.
+- **The database path is fixed at startup.** If Cline replaces the event database, restart
+  `ClineNotify` so the watcher selects the new path.
 - **The event log may contain snippets.** `events_notify.jsonl` stores the last line of a turn for
   diagnosis; treat `logs\` as private and do not attach it to a public issue.
 - **A banner is not proof of reading.** Windows decides whether a notification is visible.
