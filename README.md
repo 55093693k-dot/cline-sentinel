@@ -125,8 +125,19 @@ per announced turn.
 | Run never ends | `run.started` followed by no event at all | 1800 s |
 | Tool is parked | newest open `tool.started` has no matching `tool.finished`, no event after it, and no `tool.updated` progress | `ask_question`: 15 s; other tools: 60 s |
 
-The title is always `Cline needs you`. The body contains the local time, the reason, and the last
-useful line of the turn. A question and an approval prompt share the parked-tool path.
+The title is always `Cline needs you`; the body changes with the case:
+
+| Case | Title | Body |
+|---|---|---|
+| Turn ends: completed | `Cline needs you` | local time, `reason=completed`, last useful line |
+| Turn ends: failed / aborted | `Cline needs you` | local time, `reason=error` or `reason=aborted`, error or last line |
+| Waiting for an answer or approval | `Cline needs you` | local time, `tool ask_question pending N s` (the tool name may differ) |
+| No activity for 30 min | `Cline needs you` | local time, `reason=no-activity`, `run never ended` |
+| Manual test | `Cline needs you` | `self-test`, local time |
+
+There are **no different titles or banner styles per case**. Windows may show a different sender
+label, but the card layout is the same; one screenshot represents the notification. Body text is the
+only state-specific part. A question and an approval prompt share the parked-tool path.
 
 **Not notified:** a normal quiet stretch, a slow tool that reports progress, a single failed tool
 call that Cline retries, heartbeats, and `session.status` changes. Those events cannot distinguish
@@ -183,6 +194,19 @@ to a beep. The `sound=` field distinguishes `custom`, `wav`, `custom-missing+def
 variants. Sound can still be lost if the system is muted, the volume is too low, no output device is
 available, or the task did not run. That is independent of banner visibility: Focus assist can hide
 the banner while the sound still plays.
+
+## Notification and sound failure boundaries
+
+| Layer | What can fail | Evidence | Can the tool fix it? |
+|---|---|---|---|
+| Sender | AUMID is not registered, or per-app banners are off | `setting=` / `banner=` in `logs\toast_notify.log` | Choose another `toast_aumid`; the tool cannot register an app identity |
+| Windows policy | Focus assist, global notifications, or another desktop policy hides the banner | `setting=Enabled` and `banner=allow`, but no banner | No; this is outside the process |
+| Execution | Task disabled, PC asleep, or the database cannot be read | `heartbeat.json` stale, no new `events_notify.jsonl`, or `DB READ FAILED` | The guard can restart the notifier, not Windows or a sleeping PC |
+| Sound | Custom WAV missing/corrupt, system muted, low volume, or no output device | `sound=` in the toast log | Missing/broken WAV falls back to the system WAV/beep; volume and device are outside the tool |
+
+A banner can be hidden while the sound still plays, or the sound can fail while the banner is shown.
+`setting=Enabled` is not proof that a banner appeared; `OK` in the toast log only means the call
+returned. The event log is evidence of a decision, not proof that a person saw the card.
 
 ## Configuration
 
