@@ -33,17 +33,13 @@ function Find-Watchers {
       Where-Object { $_.CommandLine -match 'cline_notify\.py' })
 }
 
-# --- optional peer sentinel: keep ONE task-based sentinel healthy, only when enabled -------------
-# The peer is OFF by default, so this tool does not manage another tool's tasks unless asked.
-# Set CLINE_GUARD_PEER_TASK to a task name (for example 'Sim_Sentinel_1min') to enable the check;
-# set it to '-' (or leave it unset) to keep this guard independent.
+# --- optional peer sentinel: keep ONE task-based sentinel healthy -------------------------------
+# Default target is the simulation sentinel (Sim_Sentinel_1min); when that task is absent this is
+# a no-op.  Set CLINE_GUARD_PEER_TASK to another task name to override, or to '-' to disable.
 # This runs BEFORE the early exits below, because a sick peer must be fixed even when the watcher
 # itself is perfectly healthy.
-$peerTask = if ($env:CLINE_GUARD_PEER_TASK -and $env:CLINE_GUARD_PEER_TASK -ne '-') {
-    $env:CLINE_GUARD_PEER_TASK
-} else {
-    ''
-}
+$peerTask = if ($env:CLINE_GUARD_PEER_TASK) { $env:CLINE_GUARD_PEER_TASK } else { 'Sim_Sentinel_1min' }
+if ($peerTask -eq '-') { $peerTask = '' }
 $peer = if ($peerTask) { Get-ScheduledTask -TaskName $peerTask -ErrorAction SilentlyContinue } else { $null }
 if ($peer) {
     $info = Get-ScheduledTaskInfo -TaskName $peerTask

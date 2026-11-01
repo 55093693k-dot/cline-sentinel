@@ -20,7 +20,7 @@ authors:
     given-names: "Kingho"
     orcid: "https://orcid.org/0009-0002-0435-2030"
 type: software
-version: "1.0.2"
+version: "1.0.3"
 date-released: "2026-11-02"
 license:
   - "MIT"

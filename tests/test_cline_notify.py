@@ -182,7 +182,7 @@ class NotifierTests(unittest.TestCase):
         os.remove(self.db_path)
         self.assertEqual(self.poll(), [])
 
-    def test_database_switch_is_followed(self):
+    def test_database_switch_swallows_history_then_follows(self):
         self.add("run.started", when_ms=self.now - 3000)
         self.add("agent.done", {"reason": "completed", "text": "old"}, self.now - 1000)
         self.assertEqual(len(self.poll()), 1)
@@ -194,20 +194,30 @@ class NotifierTests(unittest.TestCase):
             "event text not null, session_id text, envelope_json text not null, "
             "created_at integer not null)"
         )
+        for text in ("old 1", "old 2", "old 3"):
+            con.execute(
+                "insert into hub_events(event, session_id, envelope_json, created_at) "
+                "values (?, ?, ?, ?)",
+                ("run.completed", "test-session",
+                 json.dumps({"payload": {"reason": "completed", "result": {"text": text}}},
+                            ensure_ascii=False), self.now - 1000))
+        con.commit()
+        notifier._resolve_db = lambda: str(new_path)
+        self.assertEqual(self.poll(), [])            # history at max(sequence) is swallowed
+
         con.execute(
             "insert into hub_events(event, session_id, envelope_json, created_at) "
             "values (?, ?, ?, ?)",
             ("run.started", "test-session",
-             json.dumps({"payload": {}}, ensure_ascii=False), self.now - 1000))
+             json.dumps({"payload": {}}, ensure_ascii=False), self.now))
         con.execute(
             "insert into hub_events(event, session_id, envelope_json, created_at) "
             "values (?, ?, ?, ?)",
             ("agent.done", "test-session",
              json.dumps({"payload": {"reason": "completed", "text": "new"}},
-                        ensure_ascii=False), self.now))
+                        ensure_ascii=False), self.now + 1))
         con.commit()
         con.close()
-        notifier._resolve_db = lambda: str(new_path)
         events = self.poll()
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["last"], "new")

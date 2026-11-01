@@ -166,10 +166,10 @@ def read_turns(st):
     # Resolve on EVERY read, not once at import: Cline creates a new
     # hub-events-*.db when the database is replaced, and --follow must follow it.
     db = _resolve_db()
-    if db != st.get("db_path"):
-        if st.get("db_path"):
-            print("%s DB SWITCH %s" % (now(), db), flush=True)
-        st["db_path"] = db
+    old_db = st.get("db_path") or ""
+    db_changed = bool(old_db) and db != old_db
+    if db_changed:
+        print("%s DB SWITCH %s" % (now(), db), flush=True)
         st["seq"] = 0
         st["announced"] = []
         st["pending"] = {}
@@ -182,6 +182,14 @@ def read_turns(st):
     terminal_seen = False
     try:
         con = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=5)
+        if db_changed:
+            # A new database may already contain many finished turns.  Adopt
+            # its current maximum as the baseline (the same silence as a first
+            # start); only rows written after the switch can notify.
+            max_seq = con.execute(
+                "select coalesce(max(sequence), 0) from hub_events").fetchone()[0]
+            st["seq"] = int(max_seq)
+        st["db_path"] = db
         rows = list(con.execute(
             "select sequence, event, created_at, envelope_json from hub_events "
             "where sequence > ? and event in "

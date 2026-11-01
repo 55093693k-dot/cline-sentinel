@@ -16,7 +16,7 @@ Cline hooks, or keep turn state in model memory.
 - Read-only access to `%USERPROFILE%\.cline\data\db\hub-events-*.db`.
 - One resident process plus one scheduled health check.
 - Not affiliated with Cline.
-- Release: [1.0.2](https://github.com/55093693k-dot/cline-sentinel/releases/tag/1.0.2).
+- Release: [1.0.3](https://github.com/55093693k-dot/cline-sentinel/releases/tag/1.0.3).
 
 ## Why a turn-end notifier
 
@@ -122,11 +122,10 @@ This registers:
   notifier if its heartbeat is older than 600 seconds, or if the heartbeat reports 3 consecutive
   database read failures (`db_fail >= 3`). The schedule survives a reboot.
 
-The guard can also keep **one optional peer task** healthy. This is **off by default**, so installing
-this tool does not manage another tool's scheduled tasks. To enable it, set the environment variable
-`CLINE_GUARD_PEER_TASK` to a task name, for example `Sim_Sentinel_1min`: `Disabled` → enable + start,
-non-zero `LastTaskResult` → stop + start, last run older than five minutes → start. A missing task is
-a no-op; unset the variable or set it to `-` to keep the guard independent.
+The guard also keeps **one optional peer task** healthy — by default `Sim_Sentinel_1min` (the
+simulation sentinel): `Disabled` → enable + start, non-zero `LastTaskResult` → stop + start, last run
+older than five minutes → start. A missing task is a **no-op**. Override the name with
+`CLINE_GUARD_PEER_TASK`, or set it to `-` to disable the peer check.
 
 The installer also **starts `ClineNotify` immediately**, so the first notification does not wait for a
 logout. It prints `started: ClineNotify (state=..., watcher processes=1)`; if that count is 0, check
@@ -245,7 +244,7 @@ the banner while the sound still plays.
 | Windows policy | Focus assist, global notifications, or another desktop policy hides the banner | `setting=Enabled` and `banner=allow`, but no banner | No; this is outside the process |
 | Execution | Task disabled, PC asleep, or the database cannot be read | `heartbeat.json` stale, no new `events_notify.jsonl`, or `DB READ FAILED` | The guard can restart the notifier, not Windows or a sleeping PC |
 | Hub lifecycle | Cline stops or restarts before a run starts; there is no `run.started` | no event at all; this is indistinguishable from an idle Cline | No; the notifier follows the event stream, not Cline's process |
-| Database replacement | Cline switches to a different `hub-events-*.db` | the watcher resolves the newest path on every poll and resets its cursor on a path change | A same-name replacement that reuses old sequence numbers may still need a restart |
+| Database replacement | Cline switches to a different `hub-events-*.db` | the watcher resolves the newest path on every poll; on a path change it adopts the new DB's `max(sequence)` as the baseline, so existing history stays silent and only new rows notify | A same-name replacement that reuses old sequence numbers may still need a restart |
 | Sound | Custom WAV missing/corrupt, system muted, low volume, or no output device | `sound=` in the toast log | Missing/broken WAV falls back to the system WAV/beep; volume and device are outside the tool |
 
 A banner can be hidden while the sound still plays, or the sound can fail while the banner is shown.
@@ -299,8 +298,9 @@ Paths may be absolute or use `%USERPROFILE%` / `~`. Relative paths are resolved 
   the notifier logs `DB READ FAILED`, writes `db_fail`, and `--once` exits with code 2; the guard
   restarts the watcher after 3 consecutive failures, but it cannot send a turn toast by itself.
 - **Database changes are followed, with one caveat.** The watcher resolves `hub-events-*.db` on every
-  poll and resets its cursor when the path changes. A replacement that keeps the same filename and
-  reuses old sequence numbers may still need a manual `ClineNotify` restart.
+  poll. On a path change it adopts the new DB's `max(sequence)` as the baseline, so old history is
+  swallowed and only new rows notify. A replacement that keeps the same filename and reuses old
+  sequence numbers may still need a manual `ClineNotify` restart.
 - **The event log may contain snippets.** `events_notify.jsonl` stores the last line of a turn for
   diagnosis; treat `logs\` as private and do not attach it to a public issue.
 - **A banner is not proof of reading.** Windows decides whether a notification is visible.
