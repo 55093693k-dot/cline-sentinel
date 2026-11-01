@@ -1,0 +1,23 @@
+{
+  "title": "cline-sentinel: one Windows notification when a Cline turn ends",
+  "description": "<p>cline-sentinel reads the local Cline event database on Windows and sends one notification when a turn ends, fails, is aborted, or waits for a human. It does not notify on ordinary mid-run silence. The tool uses the Python standard library, opens the database read-only, and does not call a model or the network.</p><p><strong>Scope.</strong> It supports Windows and the local Cline event database only. The database schema is a Cline implementation detail and may change. A notification proves that Windows accepted a call; it does not prove that a banner was displayed or seen. The guard has no layer below it. The approval-prompt path has not been separately verified.</p><p><strong>Licence.</strong> Source code, tests, and PowerShell scripts are MIT; written documentation is CC BY 4.0. This record uses &quot;Other (Open)&quot; because the licence field holds one identifier and cannot express the split.</p>",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "other-open",
+  "language": "eng",
+  "keywords": [
+    "Cline",
+    "Windows toast notification",
+    "turn completion",
+    "local event database",
+    "SQLite",
+    "desktop notification",
+    "evidence only"
+  ],
+  "creators": [
+    {
+      "name": "Chan, Kingho",
+      "orcid": "0009-0002-0435-2030"
+    }
+  ]
+}

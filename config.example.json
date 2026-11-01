@@ -1,0 +1,12 @@
+{
+  "hub_db": "",
+  "toast_ps1": "",
+  "log_dir": "",
+  "poll_interval_s": 2.0,
+  "parked_after_s": 60,
+  "fast_tools": {
+    "ask_question": 15
+  },
+  "hung_after_s": 1800,
+  "toast_aumid": ""
+}

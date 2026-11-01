@@ -1,0 +1,5 @@
+# Keep the Python and Markdown files LF; PowerShell scripts use Windows line endings.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.py text eol=lf
+*.md text eol=lf

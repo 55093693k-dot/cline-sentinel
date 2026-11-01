@@ -1,0 +1,239 @@
+# cline-sentinel
+
+A local Windows notifier for Cline: **one toast when a turn ends**, and silence while it is still
+working.
+
+Cline can run a long tool, wait for an approval, or stop on an error while you are away from the
+screen. This tool reads Cline's local event database, decides whether the turn needs you, and sends a
+Windows notification. It does not call a model, use the network, or depend on Cline hooks.
+
+- Windows 10/11, Python 3.8+, standard library only.
+- Read-only access to `%USERPROFILE%\.cline\data\db\hub-events-*.db`.
+- One resident process plus one scheduled health check.
+- Not affiliated with Cline.
+
+## Why a turn-end notifier
+
+An ordinary "task finished" hook is not enough. Current Cline builds can emit `run.failed` when a
+turn stops on an error (for example, quota exhaustion) **without** an `agent.done` event. A notifier
+that watches only `agent.done` misses exactly the case where you are most needed.
+
+This tool treats any terminal event as the end of a turn:
+
+`agent.done` / `run.completed` / `run.aborted` / `run.failed`
+
+It also notices two other situations: a run that produces no event for 30 minutes, and a tool call
+that stays open while nothing else happens. Mid-run silence alone is not a notification.
+
+## Quick start
+
+The examples put the folder at `%USERPROFILE%\tools\cline-sentinel`; any fixed folder works.
+
+### 1. Put the files in one folder
+
+```text
+cline-sentinel\
+├─ cline_notify.py
+├─ toast.ps1
+├─ guard.ps1
+├─ install.ps1
+├─ config.example.json
+└─ tests\
+```
+
+### 2. Create the configuration
+
+```powershell
+Copy-Item .\config.example.json .\config.json
+```
+
+The defaults work without editing:
+
+| Setting | Empty means |
+|---|---|
+| `hub_db` | auto-select the newest `%USERPROFILE%\.cline\data\db\hub-events-*.db` |
+| `toast_ps1` | `toast.ps1` next to `cline_notify.py` |
+| `log_dir` | `logs` next to `cline_notify.py` |
+| `toast_aumid` | auto-select a registered sender that allows banners |
+
+### 3. Dry run and test the notification
+
+```powershell
+python .\cline_notify.py --replay
+python .\cline_notify.py --test
+```
+
+`--replay` counts how many turn-end notifications the existing database would produce. It does not
+change state or show a toast. On a fresh database the number can be zero.
+
+`--test` shows one toast. Read the last line of `logs\toast_notify.log`:
+
+```text
+OK  2026-11-01 12:00:00  aumid=<id>  banner=allow  sound=wav  Cline needs you
+```
+
+`aumid=` is the sender that accepted the call. `banner=allow` means that sender has
+`ShowBanner=1`; `deny` or `unset` means Windows may accept the call and still show nothing. The
+sender is logged, so it is never a guess.
+
+### 4. One manual pass
+
+```powershell
+python .\cline_notify.py --once
+```
+
+A healthy run prints `no verdict` when there is nothing to report. A real turn end prints one line
+with `toast_rc=0`.
+
+### 5. Install the logon task and the guard
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Preview
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+This registers:
+
+- `ClineNotify` — runs `cline_notify.py --follow` at logon.
+- `ClineNotifyGuard` — starts two minutes after installation, then every five minutes; restarts the
+  notifier if its heartbeat is older than 600 seconds. The schedule survives a reboot.
+
+Remove both tasks with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Remove
+```
+
+### 6. Verify it is alive
+
+```powershell
+Get-ScheduledTaskInfo -TaskName 'ClineNotify' | Select-Object LastRunTime, LastTaskResult
+Get-Content .\logs\heartbeat.json
+Get-Content .\logs\events_notify.jsonl -Tail 3
+```
+
+`heartbeat.json` is rewritten every couple of seconds. `events_notify.jsonl` gets exactly one line
+per announced turn.
+
+## What it reports
+
+| Trigger | Rule | Threshold |
+|---|---|---|
+| Turn ends | any terminal event, once per run | immediate |
+| Run never ends | `run.started` followed by no event at all | 1800 s |
+| Tool is parked | newest open `tool.started` has no matching `tool.finished`, no event after it, and no `tool.updated` progress | `ask_question`: 15 s; other tools: 60 s |
+
+The title is always `Cline needs you`. The body contains the local time, the reason, and the last
+useful line of the turn. A question and an approval prompt share the parked-tool path.
+
+**Not notified:** a normal quiet stretch, a slow tool that reports progress, a single failed tool
+call that Cline retries, heartbeats, and `session.status` changes. Those events cannot distinguish
+"working" from "waiting for a human".
+
+## Deduplication and false-alarm guards
+
+1. **One key per run.** A terminal event and its siblings produce the same `run:<id>` key, so
+   `agent.done` plus `run.completed` yields one toast, not two.
+2. **Progress is activity.** A long tool that keeps writing `tool.updated` is alive. The parked
+   check measures time since the last progress, not time since the call started.
+3. **Only the newest open call counts.** A stale record from an aborted run is discarded after
+   30 minutes, and an event after an open call cancels the parked verdict.
+4. **First start is silent.** On the first run, the cursor is moved to the end of the database, so
+   history is not replayed as a burst of notifications.
+5. **A broken reader says so.** Database failures print `DB READ FAILED`; "cannot read" must not
+   look like "nothing happened".
+
+## Sender identity and sound
+
+Windows does not guarantee that a successful `Show()` call produces a visible banner. The sender's
+AUMID must be allowed to display notifications.
+
+`toast.ps1` tries, in order:
+
+1. the AUMID in `config.json` (`toast_aumid`), when set;
+2. installed AUMIDs whose per-app settings contain `ShowBanner=1`;
+3. the built-in PowerShell IDs.
+
+The accepted AUMID and its `banner=` state go into `logs\toast_notify.log`. If no sender is allowed,
+the fallback can still accept the call with `banner=unset`. Focus assist or the global notification
+switch can still suppress the banner; no program can prove that a person saw it.
+
+The toast itself is silent. `toast.ps1` plays
+`%SystemRoot%\Media\Windows Notify System Generic.wav` and falls back to a console beep. This keeps
+the sound working when a borrowed AUMID suppresses the XML `<audio>` element. The log records
+`sound=wav`, `beep`, or the failure state.
+
+## Configuration
+
+| Key | Default | Meaning |
+|---|---|---|
+| `hub_db` | empty | event database; empty selects the newest matching file |
+| `toast_ps1` | empty | notifier script; empty uses the file next to the program |
+| `log_dir` | empty | state and logs; empty uses `.\logs` |
+| `poll_interval_s` | `2.0` | database polling interval |
+| `parked_after_s` | `60` | ordinary tool threshold |
+| `fast_tools` | `{"ask_question": 15}` | per-tool parked thresholds |
+| `hung_after_s` | `1800` | no-event threshold for an open run |
+| `toast_aumid` | empty | explicit sender AUMID; empty enables detection |
+
+Paths may be absolute or use `%USERPROFILE%` / `~`. Relative paths are resolved next to
+`cline_notify.py`.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| No toast at all | Is `cline_notify.py --follow` running? Is `logs\heartbeat.json` younger than 600 s? Does `hub_db` exist? |
+| `DB READ FAILED` | Cline's database path or schema changed; run `--replay` against the current database |
+| Toast log says `OK` but no banner | Is `banner=allow`? If not, set `toast_aumid` or allow that sender in Windows notifications. If yes, check Focus assist and the global switch. |
+| Too many notifications | Increase `parked_after_s`; remove a tool from `fast_tools` |
+| No sound | Check system volume and the `sound=` field in the toast log |
+| Old toast after restart | Inspect `logs\state_notify.json`; the `pending` entry should be discarded if it is older than 30 minutes |
+| Task says it ran but nothing happens | Run `python .\cline_notify.py --once` directly and read its output; the task history alone is not evidence that the process started |
+
+## Known limits
+
+- **Cline-specific.** The SQLite schema is an implementation detail of Cline. A future version may
+  rename events or payload fields. Run `--replay` after upgrading.
+- **No network or model calls.** It cannot see a turn that never reached the local database.
+- **The approval prompt is not separately verified.** It shares the parked-tool code path, but only
+  `ask_question` was observed on the test machine. Auto-approval hides approval prompts.
+- **The guard has no layer below it.** If the guard task is disabled or the computer is off, nothing
+  restarts the notifier or delivers missed events.
+- **The event log may contain snippets.** `events_notify.jsonl` stores the last line of a turn for
+  diagnosis; treat `logs\` as private and do not attach it to a public issue.
+- **A banner is not proof of reading.** Windows decides whether a notification is visible.
+
+
+## Tests
+
+The sandbox suite creates a temporary database and never reads real Cline data or shows a toast:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+It covers the four terminal events, duplicate suppression, the 30-minute hang rule, the 15/60-second
+parked thresholds, progress updates, stale calls, and first-start silence.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `cline_notify.py` | event reader, verdicts, deduplication, toast call |
+| `toast.ps1` | AUMID selection, banner state, sound, one-line log |
+| `guard.ps1` | heartbeat check and restart |
+| `install.ps1` | Task Scheduler registration in preview, apply, or remove mode |
+| `config.example.json` | all settings, no personal paths |
+| `tests\test_cline_notify.py` | 15 sandbox tests |
+
+## Licence
+
+Copyright (c) 2026 Chan Kingho.
+
+Source code, tests, and PowerShell scripts are MIT; written documentation is CC BY 4.0. See
+[LICENSE](LICENSE) and [LICENSE-docs.md](LICENSE-docs.md).
+
+Cline is a third-party product. This repository is an independent local utility and is not
+affiliated with or endorsed by Cline.
+

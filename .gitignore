@@ -1,0 +1,17 @@
+# Python caches
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Local configuration and runtime output
+config.json
+logs/
+state_notify.json
+events_notify.jsonl
+toast_notify.log
+_toast_msg.txt
+heartbeat.json
+
+# Never commit a Cline database or a copied event extract
+hub-events-*.db
