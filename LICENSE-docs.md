@@ -2,7 +2,7 @@
 
 Copyright (c) 2026 Chan Kingho
 
-The written documentation in this repository is licensed under the
+The written documentation and the screenshot in this repository are licensed under the
 **Creative Commons Attribution 4.0 International License (CC BY 4.0)**.
 To view a copy of this license, visit https://creativecommons.org/licenses/by/4.0/
 
@@ -19,7 +19,7 @@ archived record when the material is reused.
 - `.github/workflows/tests.yml`
 
 The written documentation -- `README.md`, `SECURITY.md`, this file, and the prose inside
-`CITATION.cff` -- is licensed under **CC BY 4.0**
+`CITATION.cff` -- and the screenshot in `docs/` are licensed under **CC BY 4.0**
 (https://creativecommons.org/licenses/by/4.0/).
 
 Both identifiers appear in `CITATION.cff` as an array, which the Citation File Format reads as "or".

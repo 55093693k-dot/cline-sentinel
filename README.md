@@ -25,6 +25,14 @@ This tool treats any terminal event as the end of a turn:
 It also notices two other situations: a run that produces no event for 30 minutes, and a tool call
 that stays open while nothing else happens. Mid-run silence alone is not a notification.
 
+## What a notification looks like
+
+![Cline needs you](docs/toast-cline.png)
+
+*Captured from the Windows notification centre. The card title is always `Cline needs you`; this
+collapsed view shows the title and time, while the body carries the case-specific reason or parked
+tool. See the table below for the body variants.*
+
 ## Quick start
 
 The examples put the folder at `%USERPROFILE%\tools\cline-sentinel`; any fixed folder works.
@@ -311,8 +319,8 @@ will never crash. See [SECURITY.md](SECURITY.md) for the precise scope and repor
 
 Copyright (c) 2026 Chan Kingho.
 
-Source code, tests, and PowerShell scripts are MIT; written documentation is CC BY 4.0. See
-[LICENSE](LICENSE) and [LICENSE-docs.md](LICENSE-docs.md).
+Source code, tests, and PowerShell scripts are MIT; written documentation and the screenshot are
+CC BY 4.0. See [LICENSE](LICENSE) and [LICENSE-docs.md](LICENSE-docs.md).
 
 Cline is a third-party product. This repository is an independent local utility and is not
 affiliated with or endorsed by Cline.
