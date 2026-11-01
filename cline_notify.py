@@ -34,6 +34,12 @@ import subprocess
 import sys
 import time
 
+try:
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG = os.path.join(HERE, "config.json")
 
@@ -46,10 +52,11 @@ DEFAULTS = {
     "fast_tools": {"ask_question": 15},
     "hung_after_s": 1800,
     "toast_aumid": "",
+    "toast_sound": "",
 }
 CFG = dict(DEFAULTS)
 try:
-    with open(CONFIG, "r", encoding="utf-8") as fh:
+    with open(CONFIG, "r", encoding="utf-8-sig") as fh:
         CFG.update(json.load(fh))
 except (OSError, ValueError):
     pass
@@ -141,6 +148,9 @@ def notify(title, body):
                "-File", TOAST, "-TextFile", msg, "-LogFile", TOASTLOG]
         if CFG.get("toast_aumid"):
             cmd += ["-AppId", str(CFG["toast_aumid"])]
+        if CFG.get("toast_sound"):
+            sound = os.path.expandvars(os.path.expanduser(str(CFG["toast_sound"])))
+            cmd += ["-SoundFile", sound]
         return subprocess.call(cmd, timeout=30)
     except Exception:
         return 1

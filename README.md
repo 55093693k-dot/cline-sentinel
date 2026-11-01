@@ -55,6 +55,7 @@ The defaults work without editing:
 | `toast_ps1` | `toast.ps1` next to `cline_notify.py` |
 | `log_dir` | `logs` next to `cline_notify.py` |
 | `toast_aumid` | auto-select a registered sender that allows banners |
+| `toast_sound` | system notification WAV |
 
 ### 3. Dry run and test the notification
 
@@ -163,6 +164,25 @@ The toast itself is silent. `toast.ps1` plays
 the sound working when a borrowed AUMID suppresses the XML `<audio>` element. The log records
 `sound=wav`, `beep`, or the failure state.
 
+### Custom sound
+
+Use a standard WAV file and set `toast_sound` in `config.json`:
+
+```json
+{
+  "toast_sound": "%USERPROFILE%\\Sounds\\cline-done.wav"
+}
+```
+
+Leave it empty for the system sound. `%USERPROFILE%` and `~` are expanded. The file is played
+directly by `System.Media.SoundPlayer`; MP3 and other formats are not decoded, so use WAV.
+
+If the custom path is wrong or the file is unreadable, the tool falls back to the system WAV and then
+to a beep. The `sound=` field distinguishes `custom`, `wav`, `custom-missing+default`, and the beep
+variants. Sound can still be lost if the system is muted, the volume is too low, no output device is
+available, or the task did not run. That is independent of banner visibility: Focus assist can hide
+the banner while the sound still plays.
+
 ## Configuration
 
 | Key | Default | Meaning |
@@ -175,6 +195,7 @@ the sound working when a borrowed AUMID suppresses the XML `<audio>` element. Th
 | `fast_tools` | `{"ask_question": 15}` | per-tool parked thresholds |
 | `hung_after_s` | `1800` | no-event threshold for an open run |
 | `toast_aumid` | empty | explicit sender AUMID; empty enables detection |
+| `toast_sound` | empty | custom WAV path; empty uses the system notification WAV |
 
 Paths may be absolute or use `%USERPROFILE%` / `~`. Relative paths are resolved next to
 `cline_notify.py`.

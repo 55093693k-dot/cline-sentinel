@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$TextFile,
     [string]$LogFile = "",
-    [string]$AppId = ""
+    [string]$AppId = "",
+    [string]$SoundFile = ""
 )
 # toast.ps1 -- zero-dependency Windows toast (PowerShell 5.1 + WinRT).
 #
@@ -84,18 +85,35 @@ try {
 
     # ---- audible feedback that does NOT depend on the toast subsystem -------------------------
     # <audio> is ignored for a toast sent under a *borrowed* AUMID from a PowerShell process,
-    # so play the system wav ourselves; only system volume/mute can stop this.
-    $snd = 'none'
-    try {
-        $wav = Join-Path $env:SystemRoot 'Media\Windows Notify System Generic.wav'
-        if (Test-Path $wav) {
-            $pl = New-Object System.Media.SoundPlayer $wav
+    # so play a wav ourselves; only system volume/mute can stop this. -SoundFile selects a
+    # custom wav; a missing/broken custom file falls back to the system wav, then to beep.
+    function Play-Wav([string]$Path) {
+        try {
+            if (-not (Test-Path -LiteralPath $Path)) { return $false }
+            $pl = New-Object System.Media.SoundPlayer $Path
             $pl.PlaySync()
-            $snd = 'wav'
-        } else { $snd = 'nowav' }
-    } catch { $snd = 'wavfail' }
-    if ($snd -ne 'wav') {
-        try { 1..2 | ForEach-Object { [console]::beep(880, 120); Start-Sleep -Milliseconds 80 }; $snd = 'beep' } catch { }
+            return $true
+        } catch { return $false }
+    }
+
+    $snd = 'none'
+    if (-not [string]::IsNullOrWhiteSpace($SoundFile)) {
+        $custom = [Environment]::ExpandEnvironmentVariables($SoundFile)
+        if (-not (Test-Path -LiteralPath $custom)) { $snd = 'custom-missing' }
+        elseif (Play-Wav $custom) { $snd = 'custom' }
+        else { $snd = 'custom-fail' }
+    }
+    if ($snd -ne 'custom') {
+        $defaultWav = Join-Path $env:SystemRoot 'Media\Windows Notify System Generic.wav'
+        if (Play-Wav $defaultWav) {
+            if ($snd -eq 'none') { $snd = 'wav' } else { $snd = $snd + '+default' }
+        } elseif ($snd -eq 'none') { $snd = 'wavfail' }
+    }
+    if ($snd -notmatch '(custom|wav|default)$') {
+        try {
+            1..2 | ForEach-Object { [console]::beep(880, 120); Start-Sleep -Milliseconds 80 }
+            if ($snd -eq 'none') { $snd = 'beep' } else { $snd = $snd + '+beep' }
+        } catch { }
     }
 
     if ($LogFile) {
