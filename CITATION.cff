@@ -9,11 +9,12 @@ abstract: >-
   silence. The tool uses the Python standard library, opens the database read-only, and does not
   call a model, use the network, or rely on a hook or model memory.
 
-  SCOPE -- this is part of the citation. The tested Cline builds did not provide a Windows turn-end
-  notification. It supports Windows and the local Cline event database only. The database schema is
-  a Cline implementation detail and may change. A notification proves that Windows accepted a
-  call; it does not prove that a banner was displayed or seen. The guard has no layer below it. The
-  approval-prompt path has not been separately verified.
+  SCOPE -- this is part of the citation. Cline Desktop 0.0.48 exposes notification toggles, but its
+  Windows notification path is blocked in the tested build; this is an independent fallback, not an
+  official Cline feature. It supports Windows and the local Cline event database only. The database
+  schema is a Cline implementation detail and may change. A notification proves that Windows
+  accepted a call; it does not prove that a banner was displayed or seen. The guard has no layer
+  below it. The approval-prompt path has not been separately verified.
 authors:
   - family-names: "Chan"
     given-names: "Kingho"

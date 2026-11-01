@@ -4,8 +4,12 @@ A local Windows notifier for Cline: **one toast when a turn ends**, and silence 
 working.
 
 Cline can run a long tool, wait for an approval, or stop on an error while you are away from the
-screen. The Cline builds tested here did not provide a Windows turn-end notification. This tool adds
-one by reading Cline's local event database; it does not call a model, use the network, depend on
+screen. Cline Desktop 0.0.48 exposes notification toggles, but on Windows it reports
+`Notifications are blocked` and is absent from the notification-sender list
+([cline/cline#15267](https://github.com/cline/cline/issues/15267), open). An earlier report documents
+two Cline sender IDs and a PowerShell toast AppID mismatch
+([cline/cline#14594](https://github.com/cline/cline/issues/14594), open). This tool is an independent
+fallback: it reads Cline's local event database and does not call a model, use the network, depend on
 Cline hooks, or keep turn state in model memory.
 
 - Windows 10/11, Python 3.8+, standard library only.
