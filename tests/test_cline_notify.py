@@ -95,6 +95,12 @@ class NotifierTests(unittest.TestCase):
         self.add("agent.done", {"reason": "completed", "text": "second"}, self.now - 1000)
         self.assertEqual(len(self.poll()), 2)
 
+    def test_two_orphan_terminals_of_different_types_are_both_announced(self):
+        self.add("run.completed", {"reason": "completed", "result": {"text": "first"}},
+                 self.now - 3000)
+        self.add("agent.done", {"reason": "completed", "text": "second"}, self.now - 1000)
+        self.assertEqual(len(self.poll()), 2)
+
     def test_hung_run_after_33_minutes(self):
         self.add("run.started", when_ms=self.now - 33 * 60 * 1000)
         events = self.poll()

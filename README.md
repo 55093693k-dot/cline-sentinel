@@ -328,7 +328,7 @@ first-start silence, and the `--once` DB-failure exit code.
 | `install.ps1` | Task Scheduler registration in preview, apply, or remove mode |
 | `launch\` | hidden `wscript` wrappers for the notifier and guard |
 | `config.example.json` | all settings, no personal paths |
-| `tests\test_cline_notify.py` | 19 sandbox tests |
+| `tests\test_cline_notify.py` | 20 sandbox tests |
 
 ## Uninstall and cleanup
 

@@ -115,8 +115,6 @@ def load_state():
     st.setdefault("run_id", None)
     st.setdefault("db_path", "")
     st.setdefault("run_id_from_started", False)
-    st.setdefault("last_terminal", None)
-    st.setdefault("last_terminal_ms", 0)
     return st
 
 
@@ -179,8 +177,6 @@ def read_turns(st):
         st["run_active"] = False
         st["last_event_ms"] = 0
         st["run_id_from_started"] = False
-        st["last_terminal"] = None
-        st["last_terminal_ms"] = 0
 
     started_run = bool(st.get("run_id_from_started", False))
     terminal_seen = False
@@ -216,8 +212,6 @@ def read_turns(st):
             st["run_active"] = True
             st["pending"] = {}
             st["run_id_from_started"] = True
-            st["last_terminal"] = None
-            st["last_terminal_ms"] = 0
             started_run = True
             continue
         if ev == "tool.started":
@@ -240,16 +234,11 @@ def read_turns(st):
         st["run_active"] = False
         terminal_seen = True
         # A terminal sibling (run.completed + agent.done) shares the run id set by
-        # run.started. With NO run.started, every same-type terminal is a new
-        # orphan run; two different terminal types seconds apart are siblings.
-        same_burst = (created - st.get("last_terminal_ms", 0) <= 5000
-                      and ev != st.get("last_terminal"))
-        if not started_run and not same_burst:
+        # run.started. With NO run.started, every terminal is an orphan and gets
+        # its own id. A no-start run that emits two siblings may produce two
+        # toasts; that is the safer failure mode than silence.
+        if not started_run or st.get("run_id") is None:
             st["run_id"] = created
-        elif st.get("run_id") is None:
-            st["run_id"] = created
-        st["last_terminal"] = ev
-        st["last_terminal_ms"] = created
         result = p.get("result") or {}
         text = p.get("text") or (result.get("text") if isinstance(result, dict) else "") or ""
         if not isinstance(text, str):
@@ -379,7 +368,7 @@ def poll(allow_toast=True, initial=False):
 def replay():
     st = {"seq": 0, "announced": [], "pending": {}, "last_event_ms": 0,
           "run_active": False, "run_id": None, "db_path": "",
-          "run_id_from_started": False, "last_terminal": None, "last_terminal_ms": 0}
+          "run_id_from_started": False}
     n = 0
     while True:
         before = st["seq"]
