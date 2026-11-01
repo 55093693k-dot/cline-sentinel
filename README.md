@@ -16,7 +16,7 @@ Cline hooks, or keep turn state in model memory.
 - Read-only access to `%USERPROFILE%\.cline\data\db\hub-events-*.db`.
 - One resident process plus one scheduled health check.
 - Not affiliated with Cline.
-- Release: [1.0.1](https://github.com/55093693k-dot/cline-sentinel/releases/tag/1.0.1).
+- Release: [1.0.2](https://github.com/55093693k-dot/cline-sentinel/releases/tag/1.0.2).
 
 ## Why a turn-end notifier
 
